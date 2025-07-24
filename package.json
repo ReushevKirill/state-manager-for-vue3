@@ -1,0 +1,22 @@
+{
+  "name": "state-manager-for-vue3",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": " vite build && tsc",
+    "preview": "vite preview"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.18"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "^4.19.0",
+    "@types/node": "^24.1.0",
+    "@vitejs/plugin-vue": "^6.0.0",
+    "eslint": "^9.31.0",
+    "typescript": "~5.8.3",
+    "vite": "^7.0.4"
+  }
+}
