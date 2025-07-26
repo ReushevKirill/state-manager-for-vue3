@@ -23,7 +23,7 @@ export type StoreDefinition<
   S extends StateTree,
   A extends ActionsTree,
   G,
-> = () => S & A & GettersAsProperties<G> & ToRefs<S>
+> = () => S & A & GettersAsProperties<G> & ToRefs<S> & { $reset: () => void }
 
 export interface StavuePlugin {
   activeStores: Map<string, StateTree>
@@ -59,6 +59,16 @@ function bindGettersToStoreInstance(
   }
 }
 
+function bindMethodsToStoreInstance(
+  methods: Record<string, () => void>,
+  storeInstance: StateTree,
+): void {
+  for (const methodName of Object.keys(methods)) {
+    const method = methods[methodName]
+    storeInstance[methodName] = method.bind(storeInstance)
+  }
+}
+
 const stavueSymbol: InjectionKey<Stavue> = Symbol('stavue')
 
 export function createStavue(): Stavue & { install: (app: App) => void } {
@@ -83,7 +93,11 @@ export function defineStore<
   id: string,
   options: StoreOptions<S, A, G>,
 ): StoreDefinition<S, A, G> {
-  const useStore = (): S & A & GettersAsProperties<G> & ToRefs<S> => {
+  const useStore = (): S
+    & A
+    & GettersAsProperties<G>
+    & ToRefs<S>
+    & { $reset: () => void } => {
     const stavue = inject(stavueSymbol)
 
     if (!stavue) {
@@ -96,18 +110,42 @@ export function defineStore<
 
     if (!activeStores.has(id)) {
       const storeInstance: StateTree = {}
-      const state = reactive(options.state())
-      const actions = options.actions || ({} as A)
-      const getters = options.getters || ({} as G)
+      const {
+        state,
+        actions = {},
+        getters = {},
+      } = options
+
+      const initialState = state()
+
+      const defaultState = structuredClone(initialState)
+      const reactiveState = reactive(initialState)
+
+      const methods = {
+        $reset: () => {
+          for (const key of Object.keys(reactiveState)) {
+            if (!Object.prototype.hasOwnProperty.call(defaultState, key)) {
+              delete reactiveState[key]
+            }
+          }
+
+          Object.assign(reactiveState, defaultState)
+        },
+      }
 
       bindActionsToStoreInstance(actions, storeInstance)
-      assignStateToStoreInstance(state, storeInstance)
-      bindGettersToStoreInstance((getters as GettersTree<StateTree>), state, storeInstance)
+      assignStateToStoreInstance(reactiveState, storeInstance)
+      bindGettersToStoreInstance(
+        (getters as GettersTree<StateTree>),
+        reactiveState,
+        storeInstance,
+      )
+      bindMethodsToStoreInstance(methods, storeInstance)
 
       activeStores.set(id, storeInstance)
     }
 
-    return activeStores.get(id) as S & A & GettersAsProperties<G> & ToRefs<S>
+    return activeStores.get(id) as S & A & GettersAsProperties<G> & ToRefs<S> & { $reset: () => void }
   }
 
   return useStore
