@@ -13,7 +13,7 @@ export default defineConfig({
   build: {
     lib: {
       entry: path.resolve(__dirname, 'src/index.ts'),
-      name: 'MyVueStateManager',
+      name: 'Stavue',
       formats: ['es', 'umd'],
       fileName: format => `stavue.${format}.js`,
     },
