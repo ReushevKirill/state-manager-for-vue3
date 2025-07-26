@@ -25,12 +25,12 @@ export type StoreDefinition<
   G,
 > = () => S & A & GettersAsProperties<G> & ToRefs<S>
 
-export interface PiniaPlugin {
+export interface StavuePlugin {
   activeStores: Map<string, StateTree>
   install: (app: App) => void
 }
 
-export interface Pinia {
+export interface Stavue {
   activeStores: Map<string, StateTree>
 }
 
@@ -59,20 +59,20 @@ function bindGettersToStoreInstance(
   }
 }
 
-const piniaSymbol: InjectionKey<Pinia> = Symbol('pinia')
+const stavueSymbol: InjectionKey<Stavue> = Symbol('stavue')
 
-export function createPinia(): Pinia & { install: (app: App) => void } {
-  const pinia: Pinia = {
+export function createStavue(): Stavue & { install: (app: App) => void } {
+  const stavue: Stavue = {
     activeStores: new Map<string, StateTree>(),
   }
 
-  const piniaWithInstall = Object.assign(pinia, {
+  const stavueWithInstall = Object.assign(stavue, {
     install(app: App) {
-      app.provide(piniaSymbol, pinia)
+      app.provide(stavueSymbol, stavue)
     },
   })
 
-  return piniaWithInstall
+  return stavueWithInstall
 }
 
 export function defineStore<
@@ -84,15 +84,15 @@ export function defineStore<
   options: StoreOptions<S, A, G>,
 ): StoreDefinition<S, A, G> {
   const useStore = (): S & A & GettersAsProperties<G> & ToRefs<S> => {
-    const pinia = inject(piniaSymbol)
+    const stavue = inject(stavueSymbol)
 
-    if (!pinia) {
+    if (!stavue) {
       throw new Error(
-        `[Pinia] Could not find pinia instance. Did you forget to call "app.use(pinia)"?`,
+        `[Stavue] Could not find stavue instance. Did you forget to call "app.use(stavue)"?`,
       )
     }
 
-    const { activeStores } = pinia
+    const { activeStores } = stavue
 
     if (!activeStores.has(id)) {
       const storeInstance: StateTree = {}

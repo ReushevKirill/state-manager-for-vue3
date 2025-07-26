@@ -1,11 +1,35 @@
 {
-  "name": "state-manager-for-vue3",
+  "name": "stavue",
   "type": "module",
-  "version": "0.0.0",
-  "private": true,
+  "version": "1.0.0",
+  "description": "A modern, modular and fully-typed state manager for Vue 3.",
+  "author": "Kirill <reushev.kd@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ReushevKirill/stavue"
+  },
+  "keywords": [
+    "vue",
+    "vue3",
+    "state-manager",
+    "stavue",
+    "store"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/stavue.es.js",
+      "require": "./dist/stavue.umd.js"
+    }
+  },
+  "main": "dist/stavue.umd.js",
+  "module": "./dist/stavue.es.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
   "scripts": {
     "dev": "vite",
-    "build": " vite build && tsc",
+    "build": " vite build",
     "preview": "vite preview"
   },
   "peerDependencies": {
@@ -17,6 +41,7 @@
     "@vitejs/plugin-vue": "^6.0.0",
     "eslint": "^9.31.0",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vite-plugin-dts": "^4.5.4"
   }
 }
