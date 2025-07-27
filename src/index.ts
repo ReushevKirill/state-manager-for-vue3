@@ -43,6 +43,22 @@ export interface StavuePlugin {
 
 export interface Stavue {
   activeStores: Map<string, StateTree>
+  plugins: PluginStavue[]
+  app: App
+  install: (app: App) => void
+}
+
+export interface PluginContext {
+  store: StateTree & StoreMethods<any>
+  id: string
+  options: StoreOptions<any, any, any>
+  app: App
+}
+
+export type PluginStavue = (context: PluginContext) => void
+
+export interface CreateStavueOptions {
+  plugins?: PluginStavue[]
 }
 
 export interface SubscriptionCallbackMutation<S> {
@@ -85,24 +101,29 @@ function bindMethodsToStoreInstance(
 ): void {
   for (const methodName of Object.keys(methods)) {
     const method = methods[methodName]
-    storeInstance[methodName] = method
+    storeInstance[methodName] = method.bind(storeInstance)
   }
 }
 
 const stavueSymbol: InjectionKey<Stavue> = Symbol('stavue')
 
-export function createStavue(): Stavue & { install: (app: App) => void } {
-  const stavue: Stavue = {
+export function createStavue(options?: CreateStavueOptions):
+  Stavue
+  & { install: (app: App) => void } {
+  const stavue: Omit<Stavue, 'install'> = {
     activeStores: new Map<string, StateTree>(),
+    plugins: options?.plugins || [],
+    app: {} as App,
   }
 
   const stavueWithInstall = Object.assign(stavue, {
     install(app: App) {
-      app.provide(stavueSymbol, stavue)
+      stavue.app = app
+      app.provide(stavueSymbol, stavue as Stavue)
     },
   })
 
-  return stavueWithInstall
+  return stavueWithInstall as Stavue
 }
 
 export function defineStore<
@@ -114,7 +135,7 @@ export function defineStore<
   options: StoreOptions<S, A, G>,
 ): StoreDefinition<S, A, G> {
   const useStore = (): UseStoreReturnType<S, A, G> => {
-    const stavue = inject(stavueSymbol)
+    const stavue = inject(stavueSymbol) as Stavue
 
     if (!stavue) {
       throw new Error(
@@ -122,7 +143,7 @@ export function defineStore<
       )
     }
 
-    const { activeStores } = stavue
+    const { activeStores, plugins } = stavue
 
     if (!activeStores.has(id)) {
       const storeInstance: StateTree = {}
@@ -192,6 +213,15 @@ export function defineStore<
         storeInstance,
       )
       bindMethodsToStoreInstance(_methods, storeInstance)
+
+      plugins.forEach((plugin) => {
+        plugin({
+          store: storeInstance as any,
+          id,
+          options,
+          app: stavue.app,
+        })
+      })
 
       activeStores.set(id, storeInstance)
     }
