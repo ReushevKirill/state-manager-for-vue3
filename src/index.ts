@@ -1,5 +1,5 @@
 import type { App, ComputedRef, InjectionKey, Reactive, ToRefs } from 'vue'
-import { computed, inject, reactive, toRefs } from 'vue'
+import { computed, inject, reactive, toRefs, watch } from 'vue'
 
 export type StateTree = Record<string, any>
 export type ActionsTree = Record<string, (...args: any[]) => any>
@@ -19,11 +19,22 @@ export interface StoreOptions<
   getters?: G & ThisType<S & A & GettersAsProperties<G>> & GettersTree<S>
 }
 
+export interface StoreMethods<S> {
+  $reset: () => void
+  $subscribe: (callback: SubscriptionCallback<S>) => Unsubscribe
+}
+
+export type UseStoreReturnType<S, A, G> = S
+  & A
+  & GettersAsProperties<G>
+  & ToRefs<S>
+  & StoreMethods<S>
+
 export type StoreDefinition<
   S extends StateTree,
   A extends ActionsTree,
   G,
-> = () => S & A & GettersAsProperties<G> & ToRefs<S> & { $reset: () => void }
+> = () => UseStoreReturnType<S, A, G>
 
 export interface StavuePlugin {
   activeStores: Map<string, StateTree>
@@ -33,6 +44,15 @@ export interface StavuePlugin {
 export interface Stavue {
   activeStores: Map<string, StateTree>
 }
+
+export interface SubscriptionCallbackMutation<S> {
+  storeId: string
+  type: 'direct' // В будущем могут быть и другие, например 'patch' или 'action'
+}
+
+export type SubscriptionCallback<S> = (mutation: SubscriptionCallbackMutation<S>, state: S) => void
+
+type Unsubscribe = () => void
 
 function bindActionsToStoreInstance(actions: ActionsTree, storeInstance: StateTree): void {
   for (const actionName of Object.keys(actions)) {
@@ -60,7 +80,7 @@ function bindGettersToStoreInstance(
 }
 
 function bindMethodsToStoreInstance(
-  methods: Record<string, () => void>,
+  methods: Record<string, (...args: any[]) => void>,
   storeInstance: StateTree,
 ): void {
   for (const methodName of Object.keys(methods)) {
@@ -93,11 +113,7 @@ export function defineStore<
   id: string,
   options: StoreOptions<S, A, G>,
 ): StoreDefinition<S, A, G> {
-  const useStore = (): S
-    & A
-    & GettersAsProperties<G>
-    & ToRefs<S>
-    & { $reset: () => void } => {
+  const useStore = (): UseStoreReturnType<S, A, G> => {
     const stavue = inject(stavueSymbol)
 
     if (!stavue) {
@@ -121,7 +137,9 @@ export function defineStore<
       const defaultState = structuredClone(initialState)
       const reactiveState = reactive(initialState)
 
-      const methods = {
+      const _subscriptions: Array<(...args: any[]) => void> = []
+
+      const _methods = {
         $reset: () => {
           for (const key of Object.keys(reactiveState)) {
             if (!Object.prototype.hasOwnProperty.call(defaultState, key)) {
@@ -130,6 +148,17 @@ export function defineStore<
           }
 
           Object.assign(reactiveState, defaultState)
+        },
+        $subscribe: (callback: (...args: any[]) => void): () => void => {
+          _subscriptions.push(callback)
+          const unsubscribe = (): void => {
+            const index = _subscriptions.findIndex(fn => fn === callback)
+            if (index !== -1) {
+              _subscriptions.splice(index, 1)
+            }
+          }
+
+          return unsubscribe
         },
       }
 
@@ -140,12 +169,28 @@ export function defineStore<
         reactiveState,
         storeInstance,
       )
-      bindMethodsToStoreInstance(methods, storeInstance)
+      bindMethodsToStoreInstance(_methods, storeInstance)
+
+      watch(reactiveState, (newState) => {
+        _subscriptions.forEach((callback) => {
+          callback({
+            storeId: id,
+            type: 'direct',
+          }, newState)
+        })
+      }, {
+        deep: true,
+        flush: 'sync',
+      })
 
       activeStores.set(id, storeInstance)
     }
 
-    return activeStores.get(id) as S & A & GettersAsProperties<G> & ToRefs<S> & { $reset: () => void }
+    return activeStores.get(id) as S
+      & A
+      & GettersAsProperties<G>
+      & ToRefs<S>
+      & { $reset: () => void }
   }
 
   return useStore
