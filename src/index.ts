@@ -1,4 +1,4 @@
-import type { App, ComputedRef, InjectionKey, Reactive, ToRefs } from 'vue'
+import type { App, ComputedRef, InjectionKey, Reactive, ToRefs, WatchHandle } from 'vue'
 import { computed, inject, reactive, toRefs, watch } from 'vue'
 
 export type StateTree = Record<string, any>
@@ -47,7 +47,7 @@ export interface Stavue {
 
 export interface SubscriptionCallbackMutation<S> {
   storeId: string
-  type: 'direct' // В будущем могут быть и другие, например 'patch' или 'action'
+  type: 'direct' | 'patch' | 'action'
 }
 
 export type SubscriptionCallback<S> = (mutation: SubscriptionCallbackMutation<S>, state: S) => void
@@ -85,7 +85,7 @@ function bindMethodsToStoreInstance(
 ): void {
   for (const methodName of Object.keys(methods)) {
     const method = methods[methodName]
-    storeInstance[methodName] = method.bind(storeInstance)
+    storeInstance[methodName] = method
   }
 }
 
@@ -138,6 +138,7 @@ export function defineStore<
       const reactiveState = reactive(initialState)
 
       const _subscriptions: Array<(...args: any[]) => void> = []
+      let _stopWatcher: WatchHandle | undefined
 
       const _methods = {
         $reset: () => {
@@ -149,12 +150,33 @@ export function defineStore<
 
           Object.assign(reactiveState, defaultState)
         },
-        $subscribe: (callback: (...args: any[]) => void): () => void => {
+        $subscribe: (callback: SubscriptionCallback<S>): Unsubscribe => {
           _subscriptions.push(callback)
+
+          if (!_stopWatcher) {
+            _stopWatcher = watch(reactiveState, (newState) => {
+              _subscriptions.forEach((callback) => {
+                callback({
+                  storeId: id,
+                  type: 'direct',
+                }, newState)
+              })
+            }, {
+              deep: true,
+              flush: 'sync',
+            })
+          }
+
           const unsubscribe = (): void => {
-            const index = _subscriptions.findIndex(fn => fn === callback)
-            if (index !== -1) {
+            const index = _subscriptions.indexOf(callback)
+
+            if (index > -1) {
               _subscriptions.splice(index, 1)
+
+              if (_subscriptions.length === 0 && _stopWatcher) {
+                _stopWatcher()
+                _stopWatcher = undefined
+              }
             }
           }
 
@@ -171,26 +193,10 @@ export function defineStore<
       )
       bindMethodsToStoreInstance(_methods, storeInstance)
 
-      watch(reactiveState, (newState) => {
-        _subscriptions.forEach((callback) => {
-          callback({
-            storeId: id,
-            type: 'direct',
-          }, newState)
-        })
-      }, {
-        deep: true,
-        flush: 'sync',
-      })
-
       activeStores.set(id, storeInstance)
     }
 
-    return activeStores.get(id) as S
-      & A
-      & GettersAsProperties<G>
-      & ToRefs<S>
-      & { $reset: () => void }
+    return activeStores.get(id) as UseStoreReturnType<S, A, G>
   }
 
   return useStore
